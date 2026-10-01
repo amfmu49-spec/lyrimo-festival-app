@@ -78,8 +78,10 @@ const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
 // Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+app.use((req, res) => {
+  if (req.method === 'GET') {
+    res.sendFile(path.join(distPath, 'index.html'));
+  }
 });
 
 app.listen(PORT, () => {
