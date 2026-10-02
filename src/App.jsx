@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, ChevronRight, Disc, MessageSquare, Image as ImageIcon, Camera } from 'lucide-react';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import imageCompression from 'browser-image-compression';
 import './App.css';
 
 function App() {
@@ -10,34 +13,27 @@ function App() {
     seconds: 0
   });
 
-  // 掲示板のステート（バックエンドから取得）
   const [messages, setMessages] = useState([]);
-  
-  // バックエンドからのデータ取得
-  const fetchMessages = async () => {
-    try {
-      const res = await fetch('/api/messages');
-      const data = await res.json();
-      setMessages(data);
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchMessages();
-    // 5秒ごとにポーリングして最新を取得
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
-  }, []);
-  
   const [newName, setNewName] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [compressedImageBase64, setCompressedImageBase64] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Firestoreからリアルタイムでデータを取得
+  useEffect(() => {
+    const q = query(collection(db, "messages"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMessages(msgs);
+    });
+    return () => unsubscribe();
+  }, []);
 
-
+  // カウントダウンタイマー
   useEffect(() => {
     const eventDate = new Date('2026-10-24T00:00:00+09:00');
     const timer = setInterval(() => {
@@ -58,59 +54,65 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      // 制限: 約2MB
-      if (file.size > 2 * 1024 * 1024) {
-        alert("画像サイズは2MB以下にしてください。");
+      if (file.size > 5 * 1024 * 1024) {
+        alert("画像サイズは5MB以下にしてください。");
         e.target.value = "";
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      
+      try {
+        // 画像を100KB程度まで圧縮してBase64化する（Firestoreに直接保存するため）
+        const options = {
+          maxSizeMB: 0.1, 
+          maxWidthOrHeight: 800,
+          useWebWorker: true
+        };
+        const compressedFile = await imageCompression(file, options);
+        
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result);
+          setCompressedImageBase64(reader.result);
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error("画像圧縮エラー:", error);
+        alert("画像の処理に失敗しました。");
+      }
     }
   };
 
   const removeImage = () => {
     setImagePreview(null);
+    setCompressedImageBase64(null);
     if(fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newName.trim() || (!newMessage.trim() && !fileInputRef.current?.files[0])) return;
-    
-    const formData = new FormData();
-    formData.append("name", newName);
-    formData.append("text", newMessage);
+    if (!newName.trim() || (!newMessage.trim() && !compressedImageBase64)) return;
     
     const date = new Date();
     const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-    formData.append("date", dateStr);
-
-    if (fileInputRef.current && fileInputRef.current.files[0]) {
-      formData.append("image", fileInputRef.current.files[0]);
-    }
-
+    
     try {
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        body: formData
+      await addDoc(collection(db, "messages"), {
+        name: newName,
+        text: newMessage,
+        date: dateStr,
+        image: compressedImageBase64,
+        createdAt: serverTimestamp()
       });
-      if (res.ok) {
-        fetchMessages(); // 投稿後に最新を再取得
-        setNewName("");
-        setNewMessage("");
-        setImagePreview(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
+      
+      setNewName("");
+      setNewMessage("");
+      removeImage();
     } catch (err) {
       console.error("Failed to send message:", err);
-      alert("投稿に失敗しました。サーバーとの通信を確認してください。");
+      alert("投稿に失敗しました。データベースの権限を確認してください。");
     }
   };
 
@@ -231,7 +233,7 @@ function App() {
               <p style={{textAlign: 'center', color: 'var(--tk-text-muted)'}}>まだメッセージはありません。一番乗りで投稿しよう！</p>
             ) : (
               messages.map((msg, idx) => (
-                <div className="message-item" key={idx}>
+                <div className="message-item" key={msg.id || idx}>
                   <div className="message-header">
                     <span className="message-name">{msg.name}</span>
                     <span className="message-date">{msg.date}</span>
