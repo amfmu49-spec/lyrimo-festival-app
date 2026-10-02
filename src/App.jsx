@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, ChevronRight, Disc, MessageSquare, Image as ImageIcon, Camera } from 'lucide-react';
+import { Play, ChevronRight, Disc, MessageSquare, Image as ImageIcon, Camera, CornerDownRight, X } from 'lucide-react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import imageCompression from 'browser-image-compression';
@@ -18,6 +18,7 @@ function App() {
   const [newMessage, setNewMessage] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [compressedImageBase64, setCompressedImageBase64] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
   const fileInputRef = useRef(null);
 
   // Firestoreからリアルタイムでデータを取得
@@ -104,12 +105,14 @@ function App() {
         text: newMessage,
         date: dateStr,
         image: compressedImageBase64,
+        replyTo: replyingTo ? { id: replyingTo.id, name: replyingTo.name, text: replyingTo.text } : null,
         createdAt: serverTimestamp()
       });
       
       setNewName("");
       setNewMessage("");
       removeImage();
+      setReplyingTo(null);
     } catch (err) {
       console.error("Failed to send message:", err);
       alert("投稿に失敗しました。データベースの権限を確認してください。");
@@ -186,6 +189,17 @@ function App() {
         <h2 className="section-title"><MessageSquare className="inline-block mr-4 text-cyan-500" size={40}/> MESSAGE BOARD</h2>
         <div className="board-container">
           <div className="board-form-container">
+            {replyingTo && (
+              <div className="replying-to-banner">
+                <div className="replying-to-content">
+                  <CornerDownRight size={16} />
+                  <span><strong>{replyingTo.name}</strong> への返信</span>
+                </div>
+                <button type="button" className="reply-cancel-btn" onClick={() => setReplyingTo(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSendMessage} className="board-form">
               <input 
                 type="text" 
@@ -234,6 +248,12 @@ function App() {
             ) : (
               messages.map((msg, idx) => (
                 <div className="message-item" key={msg.id || idx}>
+                  {msg.replyTo && (
+                    <div className="message-reply-quote">
+                      <CornerDownRight size={14} className="inline-block mr-1" />
+                      <strong>{msg.replyTo.name}</strong>: {msg.replyTo.text && msg.replyTo.text.length > 30 ? msg.replyTo.text.substring(0, 30) + '...' : msg.replyTo.text}
+                    </div>
+                  )}
                   <div className="message-header">
                     <span className="message-name">{msg.name}</span>
                     <span className="message-date">{msg.date}</span>
@@ -244,6 +264,14 @@ function App() {
                       <img src={msg.image} alt="添付画像" className="message-image" />
                     </div>
                   )}
+                  <div className="message-actions">
+                    <button 
+                      className="reply-btn"
+                      onClick={() => setReplyingTo(msg)}
+                    >
+                      <CornerDownRight size={14} /> 返信する
+                    </button>
+                  </div>
                 </div>
               ))
             )}
