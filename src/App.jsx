@@ -125,6 +125,7 @@ function App() {
       <header className="header">
         <div className="logo glitch-effect" data-text="A.M.F Presents" style={{fontSize: "20px"}}>A.M.F Presents</div>
         <nav className="nav-links">
+          <a href="https://amfmu49-spec.github.io/lyrimo/" target="_blank" rel="noopener noreferrer" className="nav-link nav-highlight">アプリを開く</a>
           <a href="#about" className="nav-link">About</a>
           <a href="#board" className="nav-link">Message Board</a>
         </nav>
@@ -163,6 +164,9 @@ function App() {
         </div>
 
         <div className="hero-cta">
+          <a href="https://amfmu49-spec.github.io/lyrimo/" target="_blank" rel="noopener noreferrer" className="btn-primary">
+            リリモアプリを開く <Play className="inline-block ml-1" size={20} fill="currentColor" />
+          </a>
           <a href="#about" className="btn-secondary">
             イベント詳細を見る <ChevronRight className="inline-block ml-1" size={20} />
           </a>
